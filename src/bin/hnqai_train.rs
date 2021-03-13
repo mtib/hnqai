@@ -1,5 +1,6 @@
 use std::{fs::File, io::BufWriter};
 
+use clap::{App, Arg};
 use hnqai::{
     apply_best_action, load_trainers, AIs, BoardMove, BoardState, HnefataflTerminator, SAVE_FILE,
 };
@@ -28,14 +29,29 @@ impl<'a> Agent<BoardState> for HnAgent<'a> {
     }
 }
 
-const EPOCHS: usize = 50;
 const DOUBLE_GAMES_PER_EPOCH: usize = 50;
 const MAX_GAME_LENGTH: isize = 5000;
 const GAMMA: f64 = 1.0 - 1.0 / 50.0; // Usual games are around 50 rounds
-const ALPHA: f64 = 0.6; // There aren't that many *random* responses
+const ALPHA: f64 = 0.2; // There aren't that many *random* responses
 const INITIAL: f64 = 2.; // IDK?
 
 fn main() {
+    let matches = App::new("HNQAI Training")
+        .version("0.1")
+        .author("Markus Becker")
+        .arg(
+            Arg::new("epochs")
+                .short('e')
+                .long("epochs")
+                .value_name("EPOCHS")
+                .about("Number of epochs to run")
+                .takes_value(true)
+                .default_value("500"),
+        )
+        .get_matches();
+
+    let epochs: usize = matches.value_of_t_or_exit("epochs");
+
     let trainers = load_trainers(SAVE_FILE);
     let mut attack_trainer = trainers.attacker;
     let mut defense_trainer = trainers.defender;
@@ -45,11 +61,15 @@ fn main() {
     let mut caputre_wins = 0;
     let mut draws = 0;
 
-    for epoch in 1..=EPOCHS {
-        for _ in 1..=DOUBLE_GAMES_PER_EPOCH {
+    for epoch in 1..=epochs {
+        for g in 1..=DOUBLE_GAMES_PER_EPOCH {
             let mut attack_agent = HnAgent {
                 state: start_state.clone(),
-                opponent: Some(&defense_trainer),
+                opponent: if g % 2 == 1 {
+                    Some(&defense_trainer)
+                } else {
+                    None
+                },
             };
             attack_trainer.train(
                 &mut attack_agent,
@@ -66,12 +86,16 @@ fn main() {
             }
         }
 
-        for _ in 1..=DOUBLE_GAMES_PER_EPOCH {
+        for g in 1..=DOUBLE_GAMES_PER_EPOCH {
             let mut start_state = start_state.clone();
             apply_best_action(&mut start_state, Some(&attack_trainer));
             let mut defense_agent = HnAgent {
                 state: start_state,
-                opponent: Some(&attack_trainer),
+                opponent: if g % 2 == 1 {
+                    Some(&attack_trainer)
+                } else {
+                    None
+                },
             };
             defense_trainer.train(
                 &mut defense_agent,

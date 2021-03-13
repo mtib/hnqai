@@ -1,4 +1,4 @@
-use std::{collections::HashMap, fs::File, io::BufReader};
+use std::{collections::HashMap, fs::File, hash::Hash, io::BufReader};
 
 use hnfen::{
     moves::{possible_moves, Move, Position},
@@ -130,8 +130,8 @@ impl TerminationStrategy<BoardState> for HnefataflTerminator {
 
 #[derive(Serialize, Deserialize)]
 pub struct AIs {
-    pub attacker: HashMap<BoardState, HashMap<BoardMove, f64>>,
-    pub defender: HashMap<BoardState, HashMap<BoardMove, f64>>,
+    pub attacker: HashMap<u64, HashMap<u64, f64>>,
+    pub defender: HashMap<u64, HashMap<u64, f64>>,
 }
 
 pub struct Trainers {
@@ -230,9 +230,14 @@ pub fn apply_best_action(
         .map(|x| BoardMove { piece_move: x })
         .collect();
     if trainer.is_none() {
-        let first_move = moves.choose(&mut rng).unwrap();
-        state.board.apply(&first_move.piece_move);
-        return Some(first_move.clone());
+        let first_move = moves.choose(&mut rng);
+        if let Some(b) = first_move {
+            state.board.apply(&b.piece_move);
+            return Some(b.clone());
+        } else {
+            println!("Found a state with no response:\n{}", state.board.pretty());
+            return None;
+        }
     }
     let mut best_move = None;
     for o_move in moves.into_iter() {
